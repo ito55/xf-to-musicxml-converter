@@ -189,6 +189,34 @@ def create_lead_sheet(chord_midi_path: Path, melody_midi_path: Path, output_xml_
 # ==============================================================================
 # Command-line execution logic
 # ==============================================================================
+
+def check_chords_in_file(file_path: Path):
+    """Checks a single MIDI file for chord information and prints debug output."""
+    print(f"Checking for chords in: {file_path}")
+    if not file_path.exists():
+        print(f"❌ Error: File not found at {file_path}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        # For checking, we just need the TPQ from the file itself.
+        mf = mido.MidiFile(str(file_path))
+        chords = _parse_chords_from_midi(file_path, mf.ticks_per_beat, debug_mode=True)
+        if chords:
+            print(f"\n✅ Found {len(chords)} chords in the file.")
+        else:
+            print("\nℹ️ No chord symbols were found in the file.")
+    except Exception as e:
+        print(f"\n❌ An error occurred while checking the file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def run_lead_sheet_generation(chord_file: Path, melody_file: Path, output_file: Path):
+    """Runs the full lead sheet generation process."""
+    print("Starting lead sheet generation...")
+    print(f"  - Chord source:  {chord_file}")
+    print(f"  - Melody source: {melody_file}")
+    print(f"  - Output file:   {output_file}")
+    create_lead_sheet(chord_file, melody_file, output_file)
+    print(f"\n✅ Successfully created lead sheet: {output_file.resolve()}")
+
 def main():
     """
     Main function to parse command-line arguments and run the script.
@@ -219,39 +247,21 @@ Examples:
 
     # --- Handle Chord Check Utility ---
     if args.check_chords:
-        print(f"Checking for chords in: {args.check_chords}")
-        if not args.check_chords.exists():
-            print(f"❌ Error: File not found at {args.check_chords}", file=sys.stderr)
-            sys.exit(1)
-        try:
-            # For checking, we just need the TPQ from the file itself.
-            mf = mido.MidiFile(str(args.check_chords))
-            chords = _parse_chords_from_midi(args.check_chords, mf.ticks_per_beat, debug_mode=True)
-            if chords:
-                print(f"\n✅ Found {len(chords)} chords in the file.")
-            else:
-                print("\nℹ️ No chord symbols were found in the file.")
-            sys.exit(0)
-        except Exception as e:
-            print(f"\n❌ An error occurred while checking the file: {e}", file=sys.stderr)
-            sys.exit(1)
+        check_chords_in_file(args.check_chords)
+        sys.exit(0)
 
     # --- Handle Lead Sheet Generation ---
-    if args.chord_file and args.melody_file and args.output:
-        print("Starting lead sheet generation...")
-        print(f"  - Chord source:  {args.chord_file}")
-        print(f"  - Melody source: {args.melody_file}")
-        print(f"  - Output file:   {args.output}")
+    elif args.chord_file and args.melody_file and args.output:
         try:
-            create_lead_sheet(
-                chord_midi_path=args.chord_file,
-                melody_midi_path=args.melody_file,
-                output_xml_path=args.output
+            run_lead_sheet_generation(
+                chord_file=args.chord_file,
+                melody_file=args.melody_file,
+                output_file=args.output
             )
-            print(f"\n✅ Successfully created lead sheet: {args.output.resolve()}")
         except Exception as e:
             print(f"\n❌ An unexpected error occurred: {e}", file=sys.stderr)
             sys.exit(1)
+        sys.exit(0)
     else:
         # If no action is specified, print help.
         if not any(vars(args).values()):
