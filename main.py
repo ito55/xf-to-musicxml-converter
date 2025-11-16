@@ -260,38 +260,64 @@ def _parse_chords_from_midi(midi_path: Path, ticks_per_quarter: int, debug_mode:
         print(f"  - Scanned MIDI data and found {len(chords)} chord symbols.")
     return chords
 
-def create_lead_sheet(chord_midi_path: Path, melody_midi_path: Path, output_xml_path: Path):
+def _parse_melody_with_mido(melody_midi_path: Path, ticks_per_quarter: int) -> list[note.Note]:
     """
-    Generates a MusicXML lead sheet by merging chords and melody from two MIDI files.
+    Parses a MIDI file for melody notes on channel 1 using mido for reliability.
+    This is more robust than relying on music21's instrument partitioning.
+    """
+    notes = []
+    mf = mido.MidiFile(str(melody_midi_path))
+    open_notes = {}  # To track note_on events
+    absolute_time_ticks = 0
+
+    for msg in mido.merge_tracks(mf.tracks):
+        absolute_time_ticks += msg.time
+        if msg.is_meta:
+            continue
+
+        # Check for channel 1 (mido channels are 0-15)
+        if hasattr(msg, 'channel') and msg.channel == 0:
+            if msg.type == 'note_on' and msg.velocity > 0:
+                open_notes[msg.note] = (absolute_time_ticks, msg.velocity)
+            elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
+                if msg.note in open_notes:
+                    start_tick, velocity = open_notes.pop(msg.note)
+                    duration_ticks = absolute_time_ticks - start_tick
+                    n = note.Note(msg.note)
+                    n.offset = start_tick / ticks_per_quarter
+                    n.duration.quarterLength = duration_ticks / ticks_per_quarter
+                    notes.append(n)
+    return notes
+
+def create_lead_sheet(midi_path: Path, output_xml_path: Path):
+    """
+    Generates a MusicXML lead sheet from a single MIDI file.
+    It extracts chords and assumes the melody is on channel 1.
     """
     # 1. Parse melody file to get timing info (ticks per quarter note) and musical data
-    print("  - Parsing melody file...")
+    print("  - Parsing MIDI file for melody and metadata...")
     try:
-        melody_mf = mido.MidiFile(str(melody_midi_path))
+        melody_mf = mido.MidiFile(str(midi_path))
         ticks_per_quarter = melody_mf.ticks_per_beat
         # Use music21's converter for high-level musical structure
-        melody_score = converter.parse(str(melody_midi_path))
+        melody_score = converter.parse(str(midi_path))
     except Exception as e:
-        print(f"❌ Error: Could not parse melody file {melody_midi_path}. Details: {e}", file=sys.stderr)
+        print(f"❌ Error: Could not parse MIDI file {midi_path}. Details: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # 2. Find the melody part (assuming it's on MIDI channel 1)
-    parts = instrument.partitionByInstrument(melody_score)
-    melody_part = next((p for p in parts if p.getInstrument() and p.getInstrument().midiChannel == 1), None)
-    if not melody_part:
-        print("❌ Error: Could not find a melody part on MIDI channel 1 in the melody file.", file=sys.stderr)
-        sys.exit(1)
-    melody_part.id = 'melody'
+    # 2. Extract melody notes from channel 1 (using mido for reliability)
+    print("  - Extracting melody notes from channel 1...")
+    extracted_melody_notes = _parse_melody_with_mido(midi_path, ticks_per_quarter)
 
     # 3. Extract chords from the chord file using the timing from the melody file
-    print("  - Parsing chord file for chord symbols...")
-    extracted_chords = _parse_chords_from_midi(chord_midi_path, ticks_per_quarter)
+    print("  - Parsing for chord symbols...")
+    extracted_chords = _parse_chords_from_midi(midi_path, ticks_per_quarter)
     if not extracted_chords:
         print("Warning: No chord symbols were found in the chord file.")
 
     # 4. Get metadata (Time Signature, Key Signature) from the melody
-    ts = melody_part.getElementsByClass(meter.TimeSignature).first()
-    ks = melody_part.getElementsByClass(key.KeySignature).first()
+    ts = melody_score.getElementsByClass(meter.TimeSignature).first()
+    ks = melody_score.getElementsByClass(key.KeySignature).first()
 
     # 5. Create the new lead sheet structure
     lead_sheet = stream.Score()
@@ -303,11 +329,15 @@ def create_lead_sheet(chord_midi_path: Path, melody_midi_path: Path, output_xml_
     if ks: output_part.insert(0, ks)
 
     # 6. Insert chords and melody notes into the output part
-    print(f"  - Merging {len(extracted_chords)} chords and melody...")
+    print(f"  - Merging {len(extracted_chords)} chords and {len(extracted_melody_notes)} melody notes...")
     for cs in extracted_chords:
         output_part.insert(cs.offset, cs)
-    for el in melody_part.notesAndRests:
-        output_part.insert(el.offset, el)
+    for n in extracted_melody_notes:
+        output_part.insert(n.offset, n)
+
+    # 6.5. Quantize the part to clean up durations and avoid MusicXML errors.
+    # This is crucial for fixing "inexpressible duration" errors.
+    output_part = output_part.quantize()
 
     # 7. Add the completed part to the score and write to file
     lead_sheet.insert(0, output_part)
@@ -337,13 +367,12 @@ def check_chords_in_file(file_path: Path):
         print(f"\n❌ An error occurred while checking the file: {e}", file=sys.stderr)
         sys.exit(1)
 
-def run_lead_sheet_generation(chord_file: Path, melody_file: Path, output_file: Path):
+def run_lead_sheet_generation(input_file: Path, output_file: Path):
     """Runs the full lead sheet generation process."""
     print("Starting lead sheet generation...")
-    print(f"  - Chord source:  {chord_file}")
-    print(f"  - Melody source: {melody_file}")
+    print(f"  - Input MIDI:  {input_file}")
     print(f"  - Output file:   {output_file}")
-    create_lead_sheet(chord_file, melody_file, output_file)
+    create_lead_sheet(input_file, output_file)
     print(f"\n✅ Successfully created lead sheet: {output_file.resolve()}")
 
 def main():
@@ -356,17 +385,14 @@ def main():
         epilog="""\
 Examples:
   # Generate a lead sheet
-  python main.py --chord-file input/chords.mid --melody-file input/melody.mid --output output/sheet.xml
+  python main.py --input input/raw.mid --output output/sheet.xml
 
   # Check a single MIDI file for chord information
   python main.py --check-chords "yoasobi_yorunikakeru.mid"
 """
     )
-    # Group for lead sheet generation
-    gen_group = parser.add_argument_group('Lead Sheet Generation')
-    gen_group.add_argument("--chord-file", type=Path, help="Path to the MIDI file containing chord data (SysEx or text).")
-    gen_group.add_argument("--melody-file", type=Path, help="Path to the MIDI file containing the cleaned-up melody.")
-    gen_group.add_argument("--output", type=Path, help="Path for the generated MusicXML file.")
+    parser.add_argument("--input", type=Path, help="Path to the input MIDI file (containing both chords and melody).")
+    parser.add_argument("--output", type=Path, help="Path for the generated MusicXML file.")
 
     # Group for utility functions
     util_group = parser.add_argument_group('Utilities')
@@ -380,11 +406,10 @@ Examples:
         sys.exit(0)
 
     # --- Handle Lead Sheet Generation ---
-    elif args.chord_file and args.melody_file and args.output:
+    elif args.input and args.output:
         try:
             run_lead_sheet_generation(
-                chord_file=args.chord_file,
-                melody_file=args.melody_file,
+                input_file=args.input,
                 output_file=args.output
             )
         except Exception as e:
@@ -396,7 +421,7 @@ Examples:
         if not any(vars(args).values()):
              parser.print_help()
         else:
-             print("For lead sheet generation, you must provide --chord-file, --melody-file, and --output.", file=sys.stderr)
+             print("For lead sheet generation, you must provide both --input and --output.", file=sys.stderr)
              print("Use --help for more options.", file=sys.stderr)
         sys.exit(1)
 
