@@ -1,4 +1,3 @@
-# smf-leadsheet-builder
 A tool to generate a lead sheet (MusicXML) from a single XF-formatted Standard MIDI File (SMF).
 
 This script is designed to solve a specific problem: converting a Yamaha XF-formatted MIDI file, which contains embedded chord data, into a MusicXML lead sheet. It extracts both the chord progressions (from SysEx messages) and the melody (from Channel 1) from a single MIDI file, outputting a MusicXML file ready for use in notation software like Cubase, Dorico, or MuseScore. This streamlines the workflow by avoiding manual separation of melody and chord tracks.
