@@ -387,12 +387,12 @@ Examples:
   python main.py --check-chords "yoasobi_yorunikakeru.mid"
 """
     )
-    parser.add_argument("--input", type=Path, help="Path to the input MIDI file (containing both chords and melody).")
-    parser.add_argument("--output", type=Path, help="Path for the generated MusicXML file.")
+    parser.add_argument("--input", type=Path, metavar="file.mid", help="Path to the input MIDI file (containing both chords and melody).")
+    parser.add_argument("--output", type=Path, metavar="file.musicxml", help="Path for the generated MusicXML file.")
 
     # Group for utility functions
     util_group = parser.add_argument_group('Utilities')
-    util_group.add_argument("--check-chords", type=Path, help="Check a single MIDI file for chord information and exit.")
+    util_group.add_argument("--check-chords", type=Path, metavar="file.mid", help="Check a single MIDI file for chord information and exit.")
 
     args = parser.parse_args()
 
