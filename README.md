@@ -19,8 +19,8 @@ This script is designed to solve a specific problem: converting a Yamaha XF-form
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/ito55/smf-leadsheet-builder.git
-    cd smf-leadsheet-builder
+    git clone https://github.com/ito55/xf-to-musicxml-converter.git
+    cd xf-to-musicxml-converter
     ```
 
 2.  **Set up a virtual environment (recommended):**
