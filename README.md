@@ -1,3 +1,16 @@
+# ⚠️ This Repository has been Archived
+
+This project has been consolidated into a new, unified repository: **[midi-data-utils](https://github.com/ito55/midi-data-utils)**.
+
+As part of this transition:
+- This tool is now maintained as part of the `midi-data-utils` suite.
+- You can find the latest version and source code as `xf2musicxml`.
+- This repository is now **read-only**.
+
+Thank you for following the development!
+
+---
+
 A tool to generate a lead sheet (MusicXML) from a single XF-formatted Standard MIDI File (SMF).
 
 This script is designed to solve a specific problem: converting a Yamaha XF-formatted MIDI file, which contains embedded chord data, into a MusicXML lead sheet. It extracts both the chord progressions (from SysEx messages) and the melody (from Channel 1) from a single MIDI file, outputting a MusicXML file ready for use in notation software like Cubase, Dorico, or MuseScore. This streamlines the workflow by avoiding manual separation of melody and chord tracks.
